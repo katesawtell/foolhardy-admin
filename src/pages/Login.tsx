@@ -61,8 +61,6 @@ export default function Login() {
           Foolhardy Admin
         </h1>
 
-        <p style={{ position: "fixed", top: 8, left: 8, color: "white" }}>LOGIN PAGE RENDERED</p>
-
 
         <label
           style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.75rem" }}
