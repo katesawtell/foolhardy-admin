@@ -1,16 +1,22 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../auth/AuthContext";
 
 const navItems = [
   { path: "/dashboard", label: "Dashboard" },
   { path: "/events", label: "Events" },
   { path: "/inventory", label: "Inventory" },
   { path: "/goals", label: "Goals" },
-
+  { path: "/cash", label: "Cash Drawer" }, 
 ];
-
 
 export default function AppLayout() {
   const location = useLocation();
+  const { session } = useAuth();
+
+  function handleLogout() {
+    supabase.auth.signOut();
+  }
 
   return (
     <div className="app">
@@ -30,6 +36,12 @@ export default function AppLayout() {
             })}
           </ul>
         </nav>
+
+        {session && (
+          <button onClick={handleLogout} className="logout-button">
+            Log out
+          </button>
+        )}
       </aside>
       <main className="content">
         <Outlet />
