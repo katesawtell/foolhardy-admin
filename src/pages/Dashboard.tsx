@@ -315,7 +315,7 @@ export default function Dashboard() {
 
               {events.length > 0 && (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                  {events.slice(0, 6).map((event) => (
+                  {events.slice(0, 4).map((event) => (
                     <li
                       key={event.id}
                       style={{

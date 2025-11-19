@@ -9,6 +9,8 @@ type CashSession = {
   stall_fee: number;
   payouts: number;
   notes: string | null;
+  opening_counts: Record<string, string> | null;
+  closing_counts: Record<string, string> | null;
 };
 
 type Denom = {
@@ -75,12 +77,17 @@ export default function CashDrawer() {
   const [sessions, setSessions] = useState<CashSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
 
+  // null = creating new session, string = editing existing id
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   useEffect(() => {
     async function loadSessions() {
       setLoadingSessions(true);
       const { data, error } = await supabase
         .from("cash_sessions")
-        .select("id, date, opening_total, closing_total, stall_fee, payouts, notes")
+        .select(
+          "id, date, opening_total, closing_total, stall_fee, payouts, notes, opening_counts, closing_counts"
+        )
         .order("date", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(20);
@@ -104,33 +111,78 @@ export default function CashDrawer() {
     setErrorMsg(null);
 
     try {
-      const { error, data } = await supabase
-        .from("cash_sessions")
-        .insert([
-          {
+      const openingCountsToSave = openingCounts;
+      const closingCountsToSave = closingCounts;
+
+      let data: CashSession | null = null;
+      let error = null;
+
+      if (editingId) {
+        // UPDATE existing session
+        const resp = await supabase
+          .from("cash_sessions")
+          .update({
             date,
             opening_total: openingTotal,
             closing_total: closingTotal,
             stall_fee: stallFeeNum || 0,
             payouts: payoutsNum || 0,
             notes: notes.trim() || null,
-          },
-        ])
-        .select(
-          "id, date, opening_total, closing_total, stall_fee, payouts, notes"
-        )
-        .single();
+            opening_counts: openingCountsToSave,
+            closing_counts: closingCountsToSave,
+          })
+          .eq("id", editingId)
+          .select(
+            "id, date, opening_total, closing_total, stall_fee, payouts, notes, opening_counts, closing_counts"
+          )
+          .single();
+
+        data = (resp.data as CashSession) ?? null;
+        error = resp.error;
+      } else {
+        // INSERT new session
+        const resp = await supabase
+          .from("cash_sessions")
+          .insert([
+            {
+              date,
+              opening_total: openingTotal,
+              closing_total: closingTotal,
+              stall_fee: stallFeeNum || 0,
+              payouts: payoutsNum || 0,
+              notes: notes.trim() || null,
+              opening_counts: openingCountsToSave,
+              closing_counts: closingCountsToSave,
+            },
+          ])
+          .select(
+            "id, date, opening_total, closing_total, stall_fee, payouts, notes, opening_counts, closing_counts"
+          )
+          .single();
+
+        data = (resp.data as CashSession) ?? null;
+        error = resp.error;
+      }
 
       if (error) throw error;
 
       if (data) {
-        setSessions((prev) => [data as CashSession, ...prev]);
+        setSessions((prev) => {
+          if (editingId) {
+            return prev.map((s) => (s.id === data!.id ? data! : s));
+          }
+          return [data, ...prev];
+        });
       }
 
-      // optional: reset notes + fees/payouts; keep counts if you want
+      // reset some fields
       setNotes("");
       setStallFee("");
       setPayouts("");
+      setEditingId(null);
+      // optionally clear counts; if you want to keep them, comment these out
+      // setOpeningCounts({});
+      // setClosingCounts({});
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Error saving cash session");
@@ -150,6 +202,16 @@ export default function CashDrawer() {
     } else {
       setClosingCounts((prev) => ({ ...prev, [key]: value }));
     }
+  }
+
+  function handleCancelEdit() {
+    setEditingId(null);
+    setDate(todayStr);
+    setStallFee("");
+    setPayouts("");
+    setNotes("");
+    setOpeningCounts({});
+    setClosingCounts({});
   }
 
   return (
@@ -225,7 +287,11 @@ export default function CashDrawer() {
                           min={0}
                           value={openingCounts[key] ?? ""}
                           onChange={(e) =>
-                            handleCountChange("opening", d.value, e.target.value)
+                            handleCountChange(
+                              "opening",
+                              d.value,
+                              e.target.value
+                            )
                           }
                           style={{
                             width: "70px",
@@ -281,7 +347,11 @@ export default function CashDrawer() {
                           min={0}
                           value={closingCounts[key] ?? ""}
                           onChange={(e) =>
-                            handleCountChange("closing", d.value, e.target.value)
+                            handleCountChange(
+                              "closing",
+                              d.value,
+                              e.target.value
+                            )
                           }
                           style={{
                             width: "70px",
@@ -376,7 +446,11 @@ export default function CashDrawer() {
             </label>
 
             <label
-              style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.25rem",
+              }}
             >
               Notes (optional)
               <textarea
@@ -464,21 +538,40 @@ export default function CashDrawer() {
 
         {errorMsg && <p style={{ color: "red" }}>{errorMsg}</p>}
 
-        <button
-          type="submit"
-          disabled={saving}
-          style={{
-            alignSelf: "flex-start",
-            padding: "0.6rem 1.2rem",
-            background: "#fbbf24",
-            borderRadius: "8px",
-            border: "none",
-            fontWeight: "600",
-            cursor: "pointer",
-          }}
-        >
-          {saving ? "Saving…" : "Save session"}
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              alignSelf: "flex-start",
+              padding: "0.6rem 1.2rem",
+              background: "#fbbf24",
+              borderRadius: "8px",
+              border: "none",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            {saving ? "Saving…" : editingId ? "Update session" : "Save session"}
+          </button>
+
+          {editingId && (
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              style={{
+                padding: "0.6rem 1.2rem",
+                background: "#e5e7eb",
+                borderRadius: "8px",
+                border: "none",
+                fontWeight: "500",
+                cursor: "pointer",
+              }}
+            >
+              Cancel edit
+            </button>
+          )}
+        </div>
       </form>
 
       {/* Recent sessions */}
@@ -514,6 +607,7 @@ export default function CashDrawer() {
                 <th>Payouts</th>
                 <th>Net</th>
                 <th>Notes</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -541,6 +635,30 @@ export default function CashDrawer() {
                     </td>
                     <td style={{ maxWidth: "260px" }}>
                       <span style={{ color: "#6b7280" }}>{s.notes}</span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(s.id);
+                          setDate(s.date);
+                          setStallFee(s.stall_fee.toString());
+                          setPayouts(s.payouts.toString());
+                          setNotes(s.notes ?? "");
+                          setOpeningCounts(s.opening_counts || {});
+                          setClosingCounts(s.closing_counts || {});
+                        }}
+                        style={{
+                          padding: "0.25rem 0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          background: "#f3f4f6",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        Edit
+                      </button>
                     </td>
                   </tr>
                 );

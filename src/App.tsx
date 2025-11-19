@@ -33,10 +33,9 @@ export default function App() {
         <Route path="inventory" element={<Inventory />} />
         <Route path="goals" element={<Goals />} />
         <Route path="cash" element={<CashDrawer />} />
-      </Route>
+        <Route path="*" element={<Navigate to="/login" replace />} />
 
-      {/* Catch-all */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      </Route>
     </Routes>
   );
 }
